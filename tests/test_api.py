@@ -123,7 +123,7 @@ def test_provider_response(client, monkeypatch):
         data = json.loads(request.data)
 
         assert data["contents"][-1]["parts"][0]["text"] == "What is a class?"
-        assert data["generation_config"]["max_output_tokens"] == 600
+        assert data["generationConfig"]["maxOutputTokens"] == 600
 
         response_data = {
             "candidates": [
