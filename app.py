@@ -122,12 +122,12 @@ def get_answer(question: str, history: list[Turn]) -> AskResponse:
     })
 
     payload = {
-        "system_instruction": {
+        "systemInstruction": {
             "parts": [{"text": SYSTEM_INSTRUCTIONS}],
         },
         "contents": contents,
-        "generation_config": {
-            "max_output_tokens": 600,
+        "generationConfig": {
+            "maxOutputTokens": 600,
         },
     }
 
