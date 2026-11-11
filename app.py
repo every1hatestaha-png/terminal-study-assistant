@@ -113,8 +113,21 @@ def get_answer(question: str, history: list[Turn]) -> AskResponse:
     try:
         with urlopen(request, timeout=25) as response:
             body = json.load(response)
-    except (HTTPError, URLError, TimeoutError, OSError, ValueError) as exc:
-        raise HTTPException(status_code=502, detail="Gemini provider request failed") from exc
+    except HTTPError as exc:
+        provider_body = exc.read(4096).decode("utf-8", errors="replace")
+        print(f"Gemini API HTTP {exc.code}: {provider_body}", flush=True)
+        try:
+            provider_error = json.loads(provider_body)
+            provider_message = provider_error.get("error", {}).get("message", "")
+        except (ValueError, TypeError):
+            provider_message = ""
+        detail = f"Gemini API returned HTTP {exc.code}"
+        if provider_message:
+            detail += f": {provider_message[:500]}"
+        raise HTTPException(status_code=502, detail=detail) from exc
+    except (URLError, TimeoutError, OSError, ValueError) as exc:
+        print(f"Gemini provider connection failed: {type(exc).__name__}: {exc}", flush=True)
+        raise HTTPException(status_code=502, detail="Gemini provider connection failed") from exc
 
     answer = "\n".join(
         part.get("text", "")
