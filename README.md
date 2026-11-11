@@ -1,124 +1,120 @@
 # Terminal Study Assistant
 
-A small AI study tutor with a hosted FastAPI server and a dependency-free Python terminal client. For personal study and other authorized environments.
+A terminal-based AI study tutor. The Python terminal client talks to an authenticated FastAPI server, and the server sends questions to Google's Gemini Developer API. The Gemini API key stays on the server.
 
-## What you get
+## Features
 
-- `app.py`: FastAPI service, authenticated `/v1/ask` endpoint, `/health` check
-- `client.py`: Python 3 terminal chat with `/clear`, `/exit` and one-shot `--ask`
-- OpenAI Responses API over HTTPS on the server, with the provider API key never sent to the client
-- Limited chat history, input validation, error handling, tests and CI
-- Vercel-compatible FastAPI entrypoint
+- Terminal chat with conversation history
+- `/clear`, `/help`, and `/exit` commands
+- One-question mode with `--ask`
+- FastAPI server with bearer-token authentication
+- Gemini model selection through `GEMINI_MODEL`
+- Input validation and automated tests
 
-The terminal client **requires permitted HTTPS access** to the deployed server. It does not bypass firewalls, authentication, device policy, or other network access restrictions. Do not use it during assessments unless explicitly permitted.
+Use the service only on networks and in situations where access is permitted. Do not use it during exams or graded assessments unless your instructor explicitly allows it.
 
-## 1. Run locally
+## 1. Run locally on Windows
 
-Install Python 3.12+ and run in the project folder:
+Install Python 3.12 or newer. Open PowerShell in this project folder.
 
-```bash
-python -m venv .venv
-```
+Create and activate a virtual environment:
 
-Activate the virtual environment:
-
-- Windows PowerShell: `.venv\Scripts\Activate.ps1`
-- macOS/Linux: `source .venv/bin/activate`
-
-Then:
-
-```bash
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 ```
 
-Set environment variables in the server terminal. Generate a strong server token:
+Set the server configuration. Get a Gemini API key from Google AI Studio. Generate a private server token:
 
-```bash
+```powershell
 python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
-PowerShell:
+In the same PowerShell window, set the values and start the API:
 
 ```powershell
-$env:OPENAI_API_KEY="YOUR_REAL_OPENAI_KEY"
-$env:SERVER_TOKEN="PASTE_RANDOM_TOKEN"
-$env:OPENAI_MODEL="gpt-4.1-mini"
+$env:GEMINI_API_KEY="YOUR_GEMINI_API_KEY"
+$env:GEMINI_MODEL="gemini-3.8-flash"
+$env:SERVER_TOKEN="PASTE_YOUR_RANDOM_TOKEN"
 python -m uvicorn app:app --host 127.0.0.1 --port 8000
 ```
 
-macOS/Linux:
-
-```bash
-export OPENAI_API_KEY="YOUR_REAL_OPENAI_KEY"
-export SERVER_TOKEN="PASTE_RANDOM_TOKEN"
-export OPENAI_MODEL="gpt-4.1-mini"
-python -m uvicorn app:app --host 127.0.0.1 --port 8000
-```
-
-Open a **second** terminal:
-
-PowerShell:
+Keep that window open. Open a second PowerShell window in the same project folder:
 
 ```powershell
-$env:TUTOR_TOKEN="PASTE_RANDOM_TOKEN"
+.\.venv\Scripts\Activate.ps1
+$env:TUTOR_TOKEN="PASTE_THE_SAME_RANDOM_TOKEN"
 python client.py --url http://127.0.0.1:8000
 ```
 
-macOS/Linux:
+Ask a question in the terminal. Type `/exit` to quit.
 
-```bash
-export TUTOR_TOKEN="PASTE_RANDOM_TOKEN"
-python client.py --url http://127.0.0.1:8000
+To ask one question without starting a chat:
+
+```powershell
+python client.py --url http://127.0.0.1:8000 --ask "Explain C++ constructors"
 ```
 
-Example question: `Explain C++ constructors with a simple example.`
+## 2. Deploy using the existing Vercel project
 
-## 2. Deploy on Vercel
+The existing Vercel project is named `terminal-study-assistant-khzr`. Do not create a second project.
 
-Vercel supports zero-config FastAPI apps that expose a `FastAPI` instance named `app` in `app.py`. No custom rewrite file or keepalive is required.
+1. Open the Vercel dashboard and select the existing `terminal-study-assistant-khzr` project.
+2. Open Settings, then Git. Connect the GitHub repository `every1hatestaha-png/terminal-study-assistant` if it is not connected already.
+3. In Settings, open Environment Variables. Confirm these variables exist for the Production environment:
+   - `GEMINI_API_KEY`: your Gemini API key
+   - `GEMINI_MODEL`: `gemini-3.8-flash`
+   - `SERVER_TOKEN`: your private random server token
+4. Save any missing variables, then redeploy the latest `main` commit.
+5. Open `https://terminal-study-assistant-khzr.vercel.app/health`. A working public health endpoint returns `{"status":"ok"}`.
 
-1. Push this directory to your own **private** Git repository.
-2. In Vercel, create a new project by importing that repo. Choose the default FastAPI detection. Leave build/output overrides empty.
-3. Add the following project **Environment Variables** in Vercel settings: `OPENAI_API_KEY`, `SERVER_TOKEN`, and optionally `OPENAI_MODEL` (default `gpt-4.1-mini`).
-4. Deploy. Confirm `https://YOUR-DEPLOYMENT/health` returns `{"status":"ok"}`.
-5. In a permitted external network, set `TUTOR_TOKEN` to the server token and run:
+If Vercel Deployment Protection blocks the terminal client, the deployment owner must configure access for this project. Do not publish or share the server token. Do not turn off organization-wide security settings.
 
-```bash
-python client.py --url https://YOUR-DEPLOYMENT
+After the deployment is accessible, run the client from PowerShell:
+
+```powershell
+$env:TUTOR_TOKEN="PASTE_THE_SAME_SERVER_TOKEN"
+python client.py --url https://terminal-study-assistant-khzr.vercel.app
 ```
 
-Or ask a single question:
+One-question mode:
 
-```bash
-python client.py --url https://YOUR-DEPLOYMENT --ask "Explain polymorphism"
+```powershell
+python client.py --url https://terminal-study-assistant-khzr.vercel.app --ask "Explain polymorphism"
 ```
 
-Avoid placing either secret in the repository or embedding it into a distributed client. Be aware the server token allows its holder to spend your provider API allowance. Rotate it if shared or leaked. Vercel deployment is not an assurance that a restricted network will allow requests to it.
+## 3. Windows launcher
 
-## 3. Run tests
+You can also run `run_windows.bat`. It starts the terminal client using the configured Vercel URL and asks for the server token if `TUTOR_TOKEN` is not set.
 
-```bash
+## 4. Run tests
+
+Install development dependencies and run the full test suite:
+
+```powershell
 python -m pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-Tests use a mocked AI provider and require no provider key or network access.
+The tests mock the Gemini HTTP response. They verify application behavior without spending API credits, but they do not replace a live API test.
+
+## Configuration
+
+| Variable | Used by | Purpose |
+| --- | --- | --- |
+| `GEMINI_API_KEY` | Server | Google Gemini API key |
+| `GEMINI_MODEL` | Server | Gemini model ID, defaults to `gemini-3.8-flash` |
+| `SERVER_TOKEN` | Server | Protects the API endpoint |
+| `TUTOR_URL` | Client | Optional default server URL |
+| `TUTOR_TOKEN` | Client | Bearer token matching `SERVER_TOKEN` |
+
+Never commit `.env`, API keys, or server tokens. The terminal client does not need the Gemini API key.
 
 ## Limitations
 
-- Hosted model API usage may cost money and requires its own provider account.
-- A `SERVER_TOKEN` grants access to whoever knows it. Do not share it publicly. Requests are authenticated, but there is no persistent user database, centralized quota enforcement, or multi-tenant billing. Set provider-side spending limits for personal use.
-- Requests are synchronous and capped at 600 output tokens, with up to eight short previous chat turns.
-- An external connection must be authorized and reachable for the remote version to function. For disconnected study practice, use your local notes or an offline learning tool instead.
-
-## KHZR Vercel deployment (October 25, 2026)
-
-A separate Vercel project named `terminal-study-assistant-khzr` has been created under the KHZR team and a first build was reported `READY` at:
-
-`https://terminal-study-assistant-khzr.vercel.app`
-
-The local Windows launcher `run_windows.bat` uses this address by default. The server access token was configured on Vercel, but is deliberately stored **outside** this project archive in the separate file `terminal-study-assistant-access.txt`. On Windows you can double-click `run_windows.bat` and enter the token when asked. Python 3 is required on the computer.
-
-**Live limitations:** The OpenAI provider API key has not been configured. Until you add `OPENAI_API_KEY` in this project's Vercel environment settings and redeploy, `/v1/ask` returns 503. The project also inherited **Vercel Authentication** deployment protection (`all_except_custom_domains`), so an unauthenticated terminal client cannot access it until you configure deployment access appropriately for this project. The deployed build has not been verified with a real external HTTP request because the test environment lacks network access. No claim is made that it works over a university-managed restricted network.
-
-The app itself requires authorized HTTPS connectivity. It does not change firewall rules, bypass university authentication, or offer a method for use in restricted examinations.
+- Gemini API access requires a Google AI Studio API key and may be subject to quotas or billing.
+- Anyone with the server token can use the hosted API and consume its Gemini quota. Keep the token private and rotate it if exposed.
+- The service keeps conversation history in the terminal client, not in a user database.
+- The server allows up to eight prior turns and limits generated output to 600 tokens.
+- A successful Vercel build does not prove that the live API key, deployment access settings, or external network connection work. Test the health endpoint and then send a real question.
