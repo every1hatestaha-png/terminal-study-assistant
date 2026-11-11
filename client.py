@@ -26,7 +26,8 @@ def validate_url(raw: str) -> str:
 
 
 def request_answer(url: str, token: str, question: str, history: list[dict[str, str]]) -> str:
-    if not token.strip():
+    token = token.strip()
+    if not token:
         raise ClientError("Missing server access token")
     url = validate_url(url)
     payload = json.dumps({"question": question, "history": history}).encode("utf-8")
@@ -36,7 +37,7 @@ def request_answer(url: str, token: str, question: str, history: list[dict[str, 
         method="POST",
         headers={
             "Content-Type": "application/json",
-            "Authorization": "Bearer " + token,
+            "X-Study-Token": token,
             "Accept": "application/json",
         },
     )
@@ -55,6 +56,7 @@ def request_answer(url: str, token: str, question: str, history: list[dict[str, 
             detail = raw_error.decode("utf-8", errors="replace").strip()
 
         message = {
+            400: "Request rejected by the hosting platform",
             401: "Invalid access token",
             422: "Request rejected (invalid or too much text)",
             429: "Service rate limit reached",
@@ -66,6 +68,7 @@ def request_answer(url: str, token: str, question: str, history: list[dict[str, 
         raise ClientError(message) from exc
     except (URLError, TimeoutError, OSError) as exc:
         raise ClientError(f"Connection failed: {exc.reason if isinstance(exc, URLError) else exc}") from exc
+
     try:
         result = json.loads(body)
         answer = result["answer"]
