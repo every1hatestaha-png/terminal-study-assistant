@@ -44,6 +44,16 @@ def request_answer(url: str, token: str, question: str, history: list[dict[str, 
         with urlopen(request, timeout=35) as response:
             body = response.read(65536)
     except HTTPError as exc:
+        raw_error = exc.read(65536)
+        detail = ""
+        try:
+            error_body = json.loads(raw_error)
+            detail = error_body.get("detail") or error_body.get("error", {}).get("message", "")
+            if not isinstance(detail, str):
+                detail = json.dumps(detail)
+        except (ValueError, TypeError):
+            detail = raw_error.decode("utf-8", errors="replace").strip()
+
         message = {
             401: "Invalid access token",
             422: "Request rejected (invalid or too much text)",
@@ -51,6 +61,8 @@ def request_answer(url: str, token: str, question: str, history: list[dict[str, 
             502: "AI provider unavailable",
             503: "Server missing required configuration",
         }.get(exc.code, f"Server returned HTTP {exc.code}")
+        if detail:
+            message += f": {detail[:500]}"
         raise ClientError(message) from exc
     except (URLError, TimeoutError, OSError) as exc:
         raise ClientError(f"Connection failed: {exc.reason if isinstance(exc, URLError) else exc}") from exc
