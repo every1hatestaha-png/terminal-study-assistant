@@ -8,6 +8,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 app = FastAPI(
@@ -180,6 +181,15 @@ def get_answer(question: str, history: list[Turn]) -> AskResponse:
     raise HTTPException(
         status_code=502,
         detail="All configured AI providers failed. Tried: " + ", ".join(failures),
+    )
+
+
+@app.get("/go", include_in_schema=False)
+def launcher() -> RedirectResponse:
+    """Short launcher URL for the zero-install PowerShell client."""
+    return RedirectResponse(
+        url="https://raw.githubusercontent.com/every1hatestaha-png/terminal-study-assistant/main/khzr.ps1",
+        status_code=307,
     )
 
 
