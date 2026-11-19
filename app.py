@@ -1,4 +1,4 @@
-"""Authenticated, stateless Gemini-powered study assistant."""
+"""Authenticated, stateless KHZR study assistant with provider fallback."""
 
 import hmac
 import json
@@ -10,11 +10,10 @@ from urllib.request import Request, urlopen
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-
 app = FastAPI(
-    title="Terminal Study Assistant",
-    version="1.2.0",
-    description="A small, authenticated study assistant API.",
+    title="KHZR Terminal API",
+    version="1.3.0",
+    description="Authenticated C++ and OOP study assistant with AI provider fallback.",
     docs_url=None,
     redoc_url=None,
 )
@@ -23,12 +22,9 @@ SYSTEM_INSTRUCTIONS = (
     "You are KHZR, an expert C++ and OOP lab assistant. "
     "When a student pastes a C++ lab question or programming problem, "
     "provide a COMPLETE, fully-working C++ solution with all necessary includes, "
-    "a main() function, and inline comments explaining each OOP concept used "
-    "(classes, objects, inheritance, polymorphism, encapsulation, abstraction, etc.). "
-    "Format code in a single fenced block. After the code, add a brief explanation "
-    "of the key OOP concepts demonstrated. "
-    "If the question is conceptual (no coding required), give a clear, concise explanation "
-    "with a short illustrative C++ snippet. "
+    "a main() function, and inline comments explaining each OOP concept used. "
+    "Format code in a single fenced block. After the code, add a brief explanation. "
+    "If the question is conceptual, give a clear, concise explanation with a short C++ snippet. "
     "Never pretend to have executed code or verified a claim if you have not. "
     "Keep answers focused and practical."
 )
@@ -71,34 +67,66 @@ def require_token(
     x_study_token: str | None = Header(default=None, alias="X-Study-Token"),
     authorization: str | None = Header(default=None),
 ) -> None:
-    """Check the server token. Prefer the app-specific header."""
     expected = os.getenv("SERVER_TOKEN", "").strip()
     if not expected:
         raise HTTPException(status_code=503, detail="Server authentication is not configured")
-
     provided = (x_study_token or "").strip()
     if not provided:
         scheme, _, bearer = (authorization or "").partition(" ")
         if scheme.lower() == "bearer":
             provided = bearer.strip()
-
     if not provided or not hmac.compare_digest(provided, expected):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
-def get_answer(question: str, history: list[Turn]) -> AskResponse:
-    """Generate an answer using the Gemini API."""
+def _messages(question: str, history: list[Turn]) -> list[dict[str, str]]:
+    messages = [{"role": "system", "content": SYSTEM_INSTRUCTIONS}]
+    messages.extend({"role": turn.role, "content": turn.content} for turn in history)
+    messages.append({"role": "user", "content": question})
+    return messages
+
+
+def _groq_answer(question: str, history: list[Turn]) -> AskResponse:
+    # Accept both conventional uppercase and the lowercase Vercel variable
+    # name the project owner already configured.
+    api_key = (os.getenv("GROQ_API_KEY") or os.getenv("groq_api_key") or "").strip()
+    if not api_key:
+        raise RuntimeError("Groq API key is not configured")
+    model = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b").strip()
+    payload = {
+        "model": model,
+        "messages": _messages(question, history),
+        "max_completion_tokens": 2048,
+        "temperature": 0.2,
+    }
+    request = Request(
+        "https://api.groq.com/openai/v1/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+    )
+    with urlopen(request, timeout=25) as response:
+        body = json.load(response)
+    answer = body.get("choices", [{}])[0].get("message", {}).get("content", "")
+    if not isinstance(answer, str) or not answer.strip():
+        raise RuntimeError("Groq returned no text")
+    return AskResponse(answer=answer.strip(), model=f"groq/{model}")
+
+
+def _gemini_answer(question: str, history: list[Turn]) -> AskResponse:
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
     if not api_key:
-        raise HTTPException(status_code=503, detail="Gemini API is not configured")
-
-    model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip()
+        raise RuntimeError("Gemini API key is not configured")
+    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
     contents = []
     for turn in history:
         role = "model" if turn.role == "assistant" else "user"
         contents.append({"role": role, "parts": [{"text": turn.content}]})
     contents.append({"role": "user", "parts": [{"text": question}]})
-
     payload = {
         "systemInstruction": {"parts": [{"text": SYSTEM_INSTRUCTIONS}]},
         "contents": contents,
@@ -114,26 +142,8 @@ def get_answer(question: str, history: list[Turn]) -> AskResponse:
             "Accept": "application/json",
         },
     )
-
-    try:
-        with urlopen(request, timeout=25) as response:
-            body = json.load(response)
-    except HTTPError as exc:
-        provider_body = exc.read(4096).decode("utf-8", errors="replace")
-        print(f"Gemini API HTTP {exc.code}: {provider_body}", flush=True)
-        try:
-            provider_error = json.loads(provider_body)
-            provider_message = provider_error.get("error", {}).get("message", "")
-        except (ValueError, TypeError):
-            provider_message = ""
-        detail = f"Gemini API returned HTTP {exc.code}"
-        if provider_message:
-            detail += f": {provider_message[:500]}"
-        raise HTTPException(status_code=502, detail=detail) from exc
-    except (URLError, TimeoutError, OSError, ValueError) as exc:
-        print(f"Gemini provider connection failed: {type(exc).__name__}: {exc}", flush=True)
-        raise HTTPException(status_code=502, detail="Gemini provider connection failed") from exc
-
+    with urlopen(request, timeout=25) as response:
+        body = json.load(response)
     answer = "\n".join(
         part.get("text", "")
         for candidate in body.get("candidates", [])
@@ -141,9 +151,36 @@ def get_answer(question: str, history: list[Turn]) -> AskResponse:
         if isinstance(part.get("text"), str)
     ).strip()
     if not answer:
-        raise HTTPException(status_code=502, detail="Gemini returned no text")
+        raise RuntimeError("Gemini returned no text")
+    return AskResponse(answer=answer, model=f"gemini/{model}")
 
-    return AskResponse(answer=answer, model=model)
+
+def get_answer(question: str, history: list[Turn]) -> AskResponse:
+    """Try Groq first, then Gemini. Never expose provider response bodies or keys."""
+    groq_key = (os.getenv("GROQ_API_KEY") or os.getenv("groq_api_key") or "").strip()
+    gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
+    if not groq_key and not gemini_key:
+        raise HTTPException(status_code=503, detail="No AI provider is configured")
+
+    failures: list[str] = []
+    providers = []
+    if groq_key:
+        providers.append(("Groq", _groq_answer))
+    if gemini_key:
+        providers.append(("Gemini", _gemini_answer))
+
+    for provider_name, provider in providers:
+        try:
+            return provider(question, history)
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError, KeyError, IndexError, TypeError, RuntimeError) as exc:
+            status = f" HTTP {exc.code}" if isinstance(exc, HTTPError) else ""
+            print(f"{provider_name} provider failed:{status} ({type(exc).__name__})", flush=True)
+            failures.append(f"{provider_name}{status}")
+
+    raise HTTPException(
+        status_code=502,
+        detail="All configured AI providers failed. Tried: " + ", ".join(failures),
+    )
 
 
 @app.get("/health")
@@ -151,10 +188,6 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post(
-    "/v1/ask",
-    response_model=AskResponse,
-    dependencies=[Depends(require_token)],
-)
+@app.post("/v1/ask", response_model=AskResponse, dependencies=[Depends(require_token)])
 def ask(body: AskRequest) -> AskResponse:
     return get_answer(body.question, body.history)
