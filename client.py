@@ -123,8 +123,9 @@ def run():
             if not question:
                 continue
             try:
-                print("\nKHZR > " + request_answer(url, token, question, history) + "\n")
-                history.extend([{"role": "user", "content": question[:2000]}, {"role": "assistant", "content": "Response provided."}])
+                answer = request_answer(url, token, question, history)
+                print("\nKHZR > " + answer + "\n")
+                history.extend([{"role": "user", "content": question[:2000]}, {"role": "assistant", "content": answer[:2000]}])
                 history = history[-8:]
             except ClientError as exc:
                 print(f"\n[ERROR] {exc}\n")
