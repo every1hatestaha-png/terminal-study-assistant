@@ -121,7 +121,7 @@ def _gemini_answer(question: str, history: list[Turn]) -> AskResponse:
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
     if not api_key:
         raise RuntimeError("Gemini API key is not configured")
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
+    model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
     contents = []
     for turn in history:
         role = "model" if turn.role == "assistant" else "user"
