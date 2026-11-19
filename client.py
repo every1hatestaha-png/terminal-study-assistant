@@ -1,4 +1,5 @@
-"""KHZR Terminal client with one-time local setup and persistent settings."""
+"""KHZR Terminal client with secure Windows Credential Manager token storage."""
+
 import argparse
 import getpass
 import json
@@ -9,12 +10,18 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
+import keyring
+
 DEFAULT_URL = "https://terminal-study-assistant-khzr.vercel.app"
 APP_DIR = Path(os.getenv("APPDATA") or Path.home()) / "KHZR"
 CONFIG = APP_DIR / "config.json"
+KEYRING_SERVICE = "KHZR Terminal"
+KEYRING_USERNAME = "server-access-token"
+
 
 class ClientError(Exception):
     pass
+
 
 def load_config():
     try:
@@ -23,13 +30,28 @@ def load_config():
     except (OSError, ValueError):
         return {}
 
+
 def save_config(data):
     APP_DIR.mkdir(parents=True, exist_ok=True)
-    CONFIG.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    # The config contains only the server URL. The access token belongs in
+    # Windows Credential Manager through the keyring package.
+    safe_data = {"url": data.get("url", DEFAULT_URL)}
+    CONFIG.write_text(json.dumps(safe_data, indent=2), encoding="utf-8")
+
+
+def get_saved_token():
     try:
-        os.chmod(CONFIG, 0o600)
-    except OSError:
-        pass
+        return keyring.get_password(KEYRING_SERVICE, KEYRING_USERNAME) or ""
+    except Exception as exc:
+        raise ClientError("Windows Credential Manager is unavailable. Reinstall KHZR and try again.") from exc
+
+
+def save_token(token):
+    try:
+        keyring.set_password(KEYRING_SERVICE, KEYRING_USERNAME, token)
+    except Exception as exc:
+        raise ClientError("Could not save the token securely in Windows Credential Manager.") from exc
+
 
 def validate_url(raw):
     url = raw.strip().rstrip("/")
@@ -40,19 +62,22 @@ def validate_url(raw):
         raise ClientError("HTTPS is required outside localhost")
     return url
 
+
 def setup(config):
     print("\nKHZR TERMINAL SETUP")
-    print("This saves your private access token on this Windows account.")
+    print("Your access token will be saved in Windows Credential Manager.")
     url = input(f"Server URL [{config.get('url', DEFAULT_URL)}]: ").strip() or config.get("url", DEFAULT_URL)
     url = validate_url(url)
-    token = getpass.getpass("Server access token: ").strip()
+    token = getpass.getpass("Server access token (one time on this computer): ").strip()
     if not token:
         raise ClientError("A non-empty token is required.")
-    config.update({"url": url, "token": token})
+    save_token(token)
+    config["url"] = url
     save_config(config)
-    print(f"Setup saved to {CONFIG}")
+    print("Secure setup saved.")
     print("Next time, open CMD anywhere and type: khzr")
     return config
+
 
 def request_answer(url, token, question, history):
     token = (token or "").strip()
@@ -66,7 +91,7 @@ def request_answer(url, token, question, history):
         "Accept": "application/json",
     })
     try:
-        with urlopen(request, timeout=35) as response:
+        with urlopen(request, timeout=55) as response:
             result = json.loads(response.read(65536))
     except HTTPError as exc:
         raw = exc.read(65536).decode("utf-8", errors="replace")
@@ -78,7 +103,7 @@ def request_answer(url, token, question, history):
             401: "Access token is incorrect. Run: khzr --setup",
             404: "The API route was not found. The hosted deployment may need fixing.",
             429: "Rate limit reached. Wait a moment and retry.",
-            502: "Gemini did not respond. Check the server logs and API key.",
+            502: "Both AI providers failed. Check provider keys and server logs.",
             503: "Server configuration is incomplete. Check Vercel environment variables.",
         }
         raise ClientError(messages.get(exc.code, f"Server HTTP {exc.code}") + (f"\n{str(detail)[:400]}" if detail else "")) from exc
@@ -89,7 +114,10 @@ def request_answer(url, token, question, history):
     answer = result.get("answer")
     if not isinstance(answer, str) or not answer.strip():
         raise ClientError("The AI returned an empty response.")
+    model = result.get("model", "AI")
+    print(f"[Provider: {model}]")
     return answer
+
 
 def run():
     parser = argparse.ArgumentParser(prog="khzr", description="KHZR Terminal AI assistant")
@@ -99,13 +127,15 @@ def run():
     args = parser.parse_args()
     config = load_config()
     try:
-        if args.setup or not config.get("token"):
+        token = get_saved_token()
+        if args.setup or not token:
             config = setup(config)
+            token = get_saved_token()
         url = validate_url(args.url or config.get("url", DEFAULT_URL))
-        token = str(config.get("token", "")).strip()
         if not token:
             raise ClientError("Run khzr --setup to configure access.")
-        print("\nKHZR TERMINAL | Gemini AI")
+        print("\nKHZR TERMINAL | Groq + Gemini")
+        print("Groq is primary. Gemini is automatic backup.")
         print("Type your OOP question. Commands: /help, /clear, /exit\n")
         history = []
         if args.ask:
@@ -121,7 +151,7 @@ def run():
                 print("Bye.")
                 return 0
             if question.lower() == "/help":
-                print("Paste a C++ OOP question. The assistant will return a complete working solution.")
+                print("Paste a C++ OOP question. KHZR returns a complete working solution.")
                 print("Commands: /clear  reset conversation history | /exit  quit")
                 continue
             if question.lower() == "/clear":
@@ -140,6 +170,7 @@ def run():
     except ClientError as exc:
         print(f"[ERROR] {exc}", file=sys.stderr)
         return 1
+
 
 if __name__ == "__main__":
     raise SystemExit(run())
