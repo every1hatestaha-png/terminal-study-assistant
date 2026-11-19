@@ -12,6 +12,16 @@ if errorlevel 1 (
     pause
     exit /b 1
   )
+  set "PYTHON_CMD=python"
+) else (
+  set "PYTHON_CMD=py -3"
+)
+echo Installing secure credential storage...
+%PYTHON_CMD% -m pip install --user --upgrade keyring
+if errorlevel 1 (
+  echo Could not install keyring. Check your internet connection and Python installation.
+  pause
+  exit /b 1
 )
 copy /Y "%~dp0client.py" "%INSTALL_DIR%\client.py" >nul
 if errorlevel 1 (
@@ -33,11 +43,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "$p=[Environment]::GetEnv
 set "PATH=%INSTALL_DIR%;%PATH%"
 echo.
 echo KHZR Terminal installed.
-echo Opening one-time setup now. Your token stays in your Windows user profile.
+echo One-time setup will securely save your server token in Windows Credential Manager.
 echo.
 call "%INSTALL_DIR%\khzr.cmd" --setup
 if errorlevel 1 (
-  echo Setup did not finish. You can retry later with: khzr --setup
+  echo Setup did not finish. Retry later with: khzr --setup
   pause
   exit /b 1
 )
