@@ -12,7 +12,7 @@ import app as server
 def client(monkeypatch):
     monkeypatch.setenv("SERVER_TOKEN", "my-test-server-token")
     monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
-    monkeypatch.setenv("GEMINI_MODEL", "gemini-2.0-flash")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-3.8-flash")
     return TestClient(server.app)
 
 

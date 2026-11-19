@@ -92,7 +92,7 @@ def get_answer(question: str, history: list[Turn]) -> AskResponse:
     if not api_key:
         raise HTTPException(status_code=503, detail="Gemini API is not configured")
 
-    model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash").strip()
+    model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip()
     contents = []
     for turn in history:
         role = "model" if turn.role == "assistant" else "user"
