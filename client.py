@@ -128,6 +128,15 @@ def run():
     config = load_config()
     try:
         token = get_saved_token()
+        # Migrate credentials created by older KHZR versions without asking
+        # the user to re-enter the token on their existing computer.
+        legacy_token = str(config.pop("token", "")).strip()
+        if not token and legacy_token:
+            save_token(legacy_token)
+            save_config(config)
+            token = get_saved_token()
+        elif legacy_token:
+            save_config(config)
         if args.setup or not token:
             config = setup(config)
             token = get_saved_token()
