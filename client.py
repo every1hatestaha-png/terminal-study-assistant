@@ -55,12 +55,18 @@ def setup(config):
     return config
 
 def request_answer(url, token, question, history):
+    token = (token or "").strip()
+    if not token:
+        raise ClientError("Missing access token. Run: khzr --setup")
     payload = json.dumps({"question": question, "history": history}).encode("utf-8")
     request = Request(url + "/v1/ask", data=payload, method="POST", headers={
-        "Content-Type": "application/json", "X-Study-Token": token, "Accept": "application/json"
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + token,
+        "X-Study-Token": token,
+        "Accept": "application/json",
     })
     try:
-        with urlopen(request, timeout=45) as response:
+        with urlopen(request, timeout=35) as response:
             result = json.loads(response.read(65536))
     except HTTPError as exc:
         raw = exc.read(65536).decode("utf-8", errors="replace")
@@ -89,17 +95,18 @@ def run():
     parser = argparse.ArgumentParser(prog="khzr", description="KHZR Terminal AI assistant")
     parser.add_argument("--setup", action="store_true", help="Save or replace server settings")
     parser.add_argument("--ask", help="Ask one question and exit")
+    parser.add_argument("--url", help="Override server URL for this session", default=None)
     args = parser.parse_args()
     config = load_config()
     try:
         if args.setup or not config.get("token"):
             config = setup(config)
-        url = validate_url(config.get("url", DEFAULT_URL))
+        url = validate_url(args.url or config.get("url", DEFAULT_URL))
         token = str(config.get("token", "")).strip()
         if not token:
             raise ClientError("Run khzr --setup to configure access.")
         print("\nKHZR TERMINAL | Gemini AI")
-        print("Type your question. Commands: /help, /clear, /exit\n")
+        print("Type your OOP question. Commands: /help, /clear, /exit\n")
         history = []
         if args.ask:
             print(request_answer(url, token, args.ask, history))
@@ -114,7 +121,8 @@ def run():
                 print("Bye.")
                 return 0
             if question.lower() == "/help":
-                print("Paste a practice question. Use /clear to reset context and /exit to quit.")
+                print("Paste a C++ OOP question. The assistant will return a complete working solution.")
+                print("Commands: /clear  reset conversation history | /exit  quit")
                 continue
             if question.lower() == "/clear":
                 history.clear()

@@ -14,12 +14,12 @@ def test_terminal_to_server_to_mock_model(monkeypatch):
 
     monkeypatch.setenv("SERVER_TOKEN", token)
     monkeypatch.setenv("GEMINI_API_KEY", "fake-gemini-provider-key")
-    monkeypatch.setenv("GEMINI_MODEL", "gemini-3.8-flash")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-2.0-flash")
 
     def fake_model_request(request, timeout):
         assert (
             request.full_url
-            == "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent"
+            == "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
         )
 
         body = json.loads(request.data)

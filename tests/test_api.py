@@ -12,7 +12,7 @@ import app as server
 def client(monkeypatch):
     monkeypatch.setenv("SERVER_TOKEN", "my-test-server-token")
     monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
-    monkeypatch.setenv("GEMINI_MODEL", "gemini-3.8-flash")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-2.0-flash")
     return TestClient(server.app)
 
 
@@ -123,7 +123,7 @@ def test_provider_response(client, monkeypatch):
         data = json.loads(request.data)
 
         assert data["contents"][-1]["parts"][0]["text"] == "What is a class?"
-        assert data["generationConfig"]["maxOutputTokens"] == 600
+        assert data["generationConfig"]["maxOutputTokens"] == 2048
 
         response_data = {
             "candidates": [

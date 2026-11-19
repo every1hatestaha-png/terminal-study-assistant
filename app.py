@@ -13,17 +13,22 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 app = FastAPI(
     title="Terminal Study Assistant",
-    version="1.1.2",
+    version="1.2.0",
     description="A small, authenticated study assistant API.",
     docs_url=None,
     redoc_url=None,
 )
 
 SYSTEM_INSTRUCTIONS = (
-    "You are a concise, patient study tutor. Help students understand concepts "
-    "using clear explanations, short worked examples, and debugging tips. "
-    "For live graded assessments, coach the student through the concepts "
-    "instead of giving direct answers to assessment questions. "
+    "You are KHZR, an expert C++ and OOP lab assistant. "
+    "When a student pastes a C++ lab question or programming problem, "
+    "provide a COMPLETE, fully-working C++ solution with all necessary includes, "
+    "a main() function, and inline comments explaining each OOP concept used "
+    "(classes, objects, inheritance, polymorphism, encapsulation, abstraction, etc.). "
+    "Format code in a single fenced block. After the code, add a brief explanation "
+    "of the key OOP concepts demonstrated. "
+    "If the question is conceptual (no coding required), give a clear, concise explanation "
+    "with a short illustrative C++ snippet. "
     "Never pretend to have executed code or verified a claim if you have not. "
     "Keep answers focused and practical."
 )
@@ -87,7 +92,7 @@ def get_answer(question: str, history: list[Turn]) -> AskResponse:
     if not api_key:
         raise HTTPException(status_code=503, detail="Gemini API is not configured")
 
-    model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip()
+    model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash").strip()
     contents = []
     for turn in history:
         role = "model" if turn.role == "assistant" else "user"
@@ -97,7 +102,7 @@ def get_answer(question: str, history: list[Turn]) -> AskResponse:
     payload = {
         "systemInstruction": {"parts": [{"text": SYSTEM_INSTRUCTIONS}]},
         "contents": contents,
-        "generationConfig": {"maxOutputTokens": 600},
+        "generationConfig": {"maxOutputTokens": 2048},
     }
     request = Request(
         f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
